@@ -1,0 +1,20 @@
+{
+	"name" : "cvl/google-calendar-wrapper",
+	"description" : "Functionality for communicating with Google Calendar REST API, including reading and managing calendars, and reading and managing events",
+	"type" : "library",
+	"authors" : [{
+			"name" : "Djordje Cvijic",
+			"email" : "djordje.cvijic.etf@gmail.com"
+		}
+	],
+	"license" : "MIT",
+	"require" : {
+		"google/apiclient" : "1.*",
+		"php" : ">=5.4"
+	},
+	"autoload" : {
+		"psr-0" : {
+			"Cvl\\GoogleCalendarWrapper" : "src/"
+		}
+	}
+}
