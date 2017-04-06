@@ -11,7 +11,8 @@ class GoogleCalendarWrapper {
 	protected $hasAdvancedService = false;
 	protected $readerAclRule;
 	protected $ownerAclRule;
-	protected $mainService;
+	protected $mainService = null;
+	protected $mainServiceAccessToken = null;
 
 	protected $config = null;
 	protected $clients = array();
@@ -29,12 +30,11 @@ class GoogleCalendarWrapper {
 		if (isset($googleCalendarConfig['calendar_ids'])) {
 			$this->calendarIds = $googleCalendarConfig['calendar_ids'];
 		}
-		$client = null;
 		// If config has all required values, also add advanced authentication information to the Google client.
 		$configRequiredForService = array('application_name', 'client_id', 'client_public_key', 'client_email', 'client_private_key_file', 'calendar_owner');
 		if (empty(array_diff($configRequiredForService, array_keys($googleCalendarConfig)))) {
 			$this->hasAdvancedService = true;
-			$client = $this->getClient(self::ACCESS_TOKEN_ADVANCED);
+			$this->mainServiceAccessToken = self::ACCESS_TOKEN_ADVANCED;
 			// Set the reader ACL rule as default - reader has read permission the calendar.
 			$this->readerAclRule = new \Google_Service_Calendar_AclRule();
 			$readerAclRuleScope = new \Google_Service_Calendar_AclRuleScope();
@@ -49,12 +49,21 @@ class GoogleCalendarWrapper {
 			$this->ownerAclRule->setRole('owner');
 			$this->ownerAclRule->setScope($ownerAclRuleScope);
 		} else if (!empty($googleCalendarConfig['application_name']) && !empty($googleCalendarConfig['developer_key'])) {
-			$client = $this->getClient(self::ACCESS_TOKEN_BASIC);
+			$this->mainServiceAccessToken = self::ACCESS_TOKEN_BASIC;
 		} else {
 			throw new \Exception('Not enough configuration parameters supplied, need at least application_name and developer_key');
 		}
-		// Create the Google Calendar service based on the Google client.
-		$this->mainService = new \Google_Service_Calendar($client);
+	}
+
+	/**
+	 * @return \Google_Service_Calendar
+	 */
+	protected function getMainService() {
+		if (empty($this->mainService)) {
+			$client = $this->getClient($this->mainServiceAccessToken);
+			$this->mainService = new \Google_Service_Calendar($client);
+		}
+		return $this->mainService;
 	}
 
 	/**
@@ -62,7 +71,7 @@ class GoogleCalendarWrapper {
 	 * @return \Google_Client
 	 * @throws \Exception
 	 */
-	private function getClient($accessToken = self::ACCESS_TOKEN_OAUTH_DEFAULT) {
+	protected function getClient($accessToken = self::ACCESS_TOKEN_OAUTH_DEFAULT) {
 		if (!empty($this->clients[$accessToken])) {
 			return $this->clients[$accessToken];
 		}
@@ -115,7 +124,7 @@ class GoogleCalendarWrapper {
 	 * @return \Google_Service_Calendar
 	 * @throws \Exception
 	 */
-	private function getService($accessToken = self::ACCESS_TOKEN_OAUTH_DEFAULT) {
+	protected function getService($accessToken = self::ACCESS_TOKEN_OAUTH_DEFAULT) {
 		return new \Google_Service_Calendar($this->getClient($accessToken));
 	}
 
@@ -172,7 +181,7 @@ class GoogleCalendarWrapper {
 		if (!empty($maxNumberOfEvents)) {
 			$optParams['maxResults'] = $maxNumberOfEvents;
 		}
-		$events = $this->mainService->events->listEvents($calendarId, $optParams)->getItems();
+		$events = $this->getMainService()->events->listEvents($calendarId, $optParams)->getItems();
 		$calendarEvents = array();
 		foreach ($events as $event) {
 			$calendarEvents[] = CalendarEvent::createFromGoogleEvent($event);
@@ -193,7 +202,7 @@ class GoogleCalendarWrapper {
 			'singleEvents' => true,
 			'timeMin' => date('c')
 		);
-		return $this->mainService->events->listEvents($calendarId, $optParams);
+		return $this->getMainService()->events->listEvents($calendarId, $optParams);
 	}
 
 	/**
@@ -251,10 +260,10 @@ class GoogleCalendarWrapper {
 		$model = new \Google_Service_Calendar_Calendar();
 		$model->setSummary($summary);
 		$model->setTimeZone('GMT');
-		$newCalendar = $this->mainService->calendars->insert($model);
+		$newCalendar = $this->getMainService()->calendars->insert($model);
 		$calendarId = $newCalendar->getId();
-		$this->mainService->acl->insert($calendarId, $this->readerAclRule);
-		$this->mainService->acl->insert($calendarId, $this->ownerAclRule);
+		$this->getMainService()->acl->insert($calendarId, $this->readerAclRule);
+		$this->getMainService()->acl->insert($calendarId, $this->ownerAclRule);
 		return $calendarId;
 	}
 
@@ -266,7 +275,7 @@ class GoogleCalendarWrapper {
 		if (!$this->hasAdvancedService) {
 			throw new \Exception('Google Calendar service was never initialized');
 		}
-		$this->mainService->calendars->delete($calendarId);
+		$this->getMainService()->calendars->delete($calendarId);
 	}
 
 	/**
